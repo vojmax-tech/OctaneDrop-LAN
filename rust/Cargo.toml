@@ -1,0 +1,3 @@
+[workspace]
+members = ["crates/voltdrop-p2p-core", "crates/voltdrop-rs"]
+resolver = "2"

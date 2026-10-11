@@ -9,6 +9,8 @@ venv/
 .mypy_cache/
 build/
 dist/
+python/build/
+python/dist/
 *.spec.bak
 data/storage/*
 !data/storage/.gitkeep
@@ -17,6 +19,13 @@ data/.session_secret
 data/.encryption_key
 
 data/.tls/
+python/data/storage/*
+!python/data/storage/.gitkeep
+python/data/fileshare.db
+python/data/.session_secret
+python/data/.encryption_key
+python/data/.tls/
+rust/target/
 
 # Internal author notes
 .author-notes.txt

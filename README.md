@@ -1,296 +1,160 @@
-# OctaneDrop LAN
+# VoltDrop
 
-OctaneDrop LAN is a self-hosted secure file sharer for a local Wi‑Fi or wired LAN.
-It runs as a small FastAPI web app, uses **#ff7300** as the UI theme, and is meant to be opened from any phone, tablet, or laptop connected to the same network.
+VoltDrop is a LAN-first file sharing application.
 
-This repo is ready for a **public GitHub repository + GitHub Releases** workflow so anyone can download a Windows `.exe` and run their own LAN host.
+- Local network transfer with no cloud dependency
+- Browser-based Python app (`python/`)
+- Rust implementation in progress (`rust/`)
+- Peer discovery via UDP and direct transfer via TCP in P2P mode
 
-## What it does
+## Features
 
-- Password-protected web dashboard
-- Local-network-only request filtering based on detected private subnets
-- Encrypted-at-rest file storage using AES-GCM
-- **Streamed encrypted uploads/downloads**, so large files do not need to be loaded fully into RAM
-- **1 TiB per-file limit** by default
-- CSRF protection on state-changing actions
-- Signed temporary share links for downloads
-- Login and upload rate limiting
-- SHA-256 checksum shown for every file
-- Works across phones, tablets, and laptops on the same Wi‑Fi
-- Instant file-list updates over WebSockets when another device uploads or deletes a file
-- Optional auto-open of the local browser when run as a bundled desktop executable
-- Auto-generated local HTTPS certificates for source runs and the packaged Windows EXE
-- One-click CA download endpoint for other LAN devices that need to trust the local certificate
+- Password-protected access
+- File upload/download and deletion
+- Authenticated API access
+- P2P peer discovery and direct device transfer
+- Transfer progress, session tracking, and cancellation
+- Windows executable build pipeline
 
-## Hosting model
-
-This app is a **single host + many clients** design:
-
-- One machine runs the OctaneDrop server.
-- Everyone else on the same Wi‑Fi/LAN opens that host's URL in a browser.
-- Multiple people can use it at the same time.
-- If the host machine turns off, sleeps, or leaves the network, the app goes offline until it comes back.
-
-Good always-on hosts:
-
-- Raspberry Pi
-- NAS
-- Mini PC / homelab box
-- Spare laptop that stays on
-
-## Project structure
+## Repository Layout
 
 ```text
-lan_file_sharer/
-├── .github/
-│   └── workflows/
-│       └── build-windows-release.yml
-├── app/
-│   ├── config.py
-│   ├── db.py
-│   ├── main.py
-│   ├── network.py
-│   ├── security.py
-│   ├── tls.py
-│   ├── static/
-│   │   ├── app.js
-│   │   ├── favicon.ico
-│   │   ├── favicon.png
-│   │   ├── favicon.svg
-│   │   └── styles.css
-│   └── templates/
-│       ├── base.html
-│       ├── index.html
-│       └── login.html
-├── data/
-│   └── storage/
-├── packaging/
-│   └── octanedrop.ico
-├── build_windows_exe.bat
-├── build_windows_exe.ps1
-├── launcher.py
-├── LICENSE
-├── orange_drop_lan.spec
-├── requirements-build.txt
-├── requirements.txt
-└── run.py
+.
+|-- .github/
+|-- python/          # Current stable app (FastAPI + web UI)
+|-- rust/            # Rust implementation (workspace + crates)
+|-- RUST_MIGRATION.md
+`-- README.md
 ```
 
-## Quick start from source
+## Quick Start (Python App)
 
-### 1) Create a virtual environment
+1. Create and activate a virtual environment.
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate
 ```
-
-On Windows PowerShell:
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-```
-
-### 2) Install dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-On first run, OctaneDrop creates its own local session secret, at-rest encryption key, database, and local TLS files inside the app data directory.
-
-### 3) Create the admin account
-
-```bash
-python run.py create-admin --username admin
-```
-
-You will be prompted for a password. Use a long one.
-
-### 4) Start the app
-
-```bash
-python run.py serve --host 0.0.0.0 --port 8765 --open-browser
-```
-
-Open the printed LAN URL from another device connected to the same Wi‑Fi.
-
-Example:
-
-```text
-https://192.168.1.24:8765
-```
-
-## Automatic local HTTPS (default)
-
-`python run.py serve` and the packaged Windows EXE now auto-generate a local CA + server certificate and serve the app over HTTPS by default.
-
-What happens automatically:
-
-- a persistent local CA is created under the app data directory
-- a fresh server certificate is generated for `localhost`, the detected LAN IP, and the host machine name
-- on Windows, the EXE/source launcher tries to add the CA to the **current user** trusted root store so the host browser stops showing the not-secure warning
-- other LAN devices can download the CA once from `/ca-cert.pem` and trust it on that device
-
-Disable auto-generated HTTPS if you explicitly want plain HTTP:
-
-```bash
-python run.py serve --host 0.0.0.0 --port 8765 --no-auto-tls
-```
-
-Or provide your own certificate files:
-
-```bash
-python run.py serve \
-  --host 0.0.0.0 \
-  --port 8765 \
-  --ssl-certfile cert.pem \
-  --ssl-keyfile key.pem
-```
-
-## Environment variables
-
-These are optional.
-
-| Variable | Purpose | Default |
-|---|---|---|
-| `FILESHARE_APP_NAME` | App name in the UI | `OctaneDrop LAN` |
-| `FILESHARE_HOST` | Bind host | `0.0.0.0` |
-| `FILESHARE_PORT` | Bind port | `8765` |
-| `FILESHARE_MAX_UPLOAD_BYTES` | Max size per uploaded file | `1099511627776` |
-| `FILESHARE_MAX_UPLOAD_MB` | Legacy alternate upload limit | unset |
-| `FILESHARE_STREAM_CHUNK_MB` | Encryption stream chunk size | `8` |
-| `FILESHARE_ALLOWED_SUBNETS` | Comma-separated CIDRs to allow | auto-detected |
-| `FILESHARE_SHARE_TOKEN_TTL_SECONDS` | Temporary link lifetime | `600` |
-| `FILESHARE_SESSION_MAX_AGE_SECONDS` | Session length | `43200` |
-| `FILESHARE_PUBLIC_BASE_URL` | Force share links to use a specific base URL | unset |
-| `FILESHARE_DATA_DIR` | Override where the database, secrets, and uploads are stored | platform default |
-| `FILESHARE_AUTO_OPEN_BROWSER` | Set to `0` to stop the bundled executable from opening a browser automatically | `1` |
-
-## Windows EXE bundling
-
-This project is bundling-ready with PyInstaller.
-
-### Build locally on Windows
 
 PowerShell:
 
 ```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+2. Install dependencies.
+
+```bash
+pip install -r python/requirements.txt
+```
+
+3. Create an admin account.
+
+```bash
+python python/run.py create-admin --username admin
+```
+
+4. Start the server.
+
+Host mode:
+
+```bash
+python python/run.py serve --mode host --host 0.0.0.0 --port 8765 --open-browser
+```
+
+P2P mode:
+
+```bash
+python python/run.py serve --mode p2p --host 0.0.0.0 --port 8765 --open-browser
+```
+
+## Desktop App Mode (Windows EXE)
+
+The packaged Windows app launches a native desktop window by default (embedded webview), not an external browser tab.
+
+- Default EXE behavior: desktop window
+- Optional fallback: `--no-desktop` (runs as local server and can open browser)
+- Desktop window backend: `pywebview` (included by `python/requirements.txt`)
+- Windows runtime: Microsoft Edge WebView2 Runtime
+
+Source launcher commands:
+
+```bash
+python python/launcher.py --desktop
+python python/launcher.py --no-desktop
+```
+
+## P2P Design
+
+- Discovery: UDP broadcast/listen
+- Transfer: TCP stream with framed control messages
+- Session states: queued, connecting, sending, receiving, persisting, completed, failed, canceled
+
+Primary Python modules:
+
+- `python/app/discovery.py`
+- `python/app/p2p_service.py`
+- `python/app/connection.py`
+- `python/app/protocol.py`
+
+## Windows EXE Build (Python)
+
+```powershell
+cd python
 ./build_windows_exe.ps1
 ```
 
-Batch:
+Output:
 
-```bat
-build_windows_exe.bat
+```text
+python/dist/VoltDrop/VoltDrop.exe
 ```
 
-Or manually:
+## Build Troubleshooting (Windows)
+
+If PowerShell blocks the script with an execution policy error:
 
 ```powershell
-python -m pip install -r requirements-build.txt
-python -m PyInstaller --noconfirm --clean orange_drop_lan.spec
+powershell -ExecutionPolicy Bypass -File .\build_windows_exe.ps1
 ```
 
-The output executable will be:
+If the build fails with `Failed building wheel for pythonnet` (or `nuget.exe update -self` during `pythonnet` install), use Python 3.12 for the desktop build:
 
-```text
-dist\OctaneDropLAN.exe
+```powershell
+cd python
+py -3.12 -m pip install --upgrade pip
+py -3.12 -m pip install -r requirements-build.txt
+py -3.12 -m PyInstaller --noconfirm --clean voltdrop_onedir.spec
 ```
 
-### Where the EXE stores data
+Build scripts now auto-select `py -3.12` when it is installed and stop early with a clear message if the active Python is not 3.12.
 
-When frozen as an EXE, OctaneDrop LAN stores its database, encryption key, session secret, uploaded files, and generated local TLS certificates here by default:
+If dependency installation still fails, check:
 
-```text
-%LOCALAPPDATA%\OctaneDropLAN
-```
+- Internet/firewall access to PyPI
+- Proxy settings used by `pip`
+- Python package install permissions
 
-That keeps data persistent even though the executable itself is bundled.
+Desktop-window mode requires `pywebview`. If it is unavailable, VoltDrop falls back to browser mode.
 
-## GitHub repo + Releases workflow
+## CI / Releases
 
-This repo is already set up for the standard public-download flow:
+GitHub Actions builds and publishes:
 
-1. Create a new GitHub repository.
-2. Push this project to the repository.
-3. Open the **Actions** tab and allow workflows if GitHub asks.
-4. Create a version tag and push it:
+- `python/dist/VoltDrop-windows.zip`
+- `python/dist/VoltDrop-windows.zip.sha256`
 
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
+Workflow file:
 
-5. The workflow in `.github/workflows/build-windows-release.yml` will:
-   - build `OctaneDropLAN.exe` on a GitHub-hosted Windows runner
-   - generate a SHA-256 checksum file
-   - upload the EXE as a workflow artifact
-   - publish both files to **GitHub Releases** for tag builds
+- `.github/workflows/build-windows-release.yml`
 
-After that, users can download from your repo’s Releases page, or from the latest-release pattern:
+## Rust Implementation
 
-```text
-https://github.com/<owner>/<repo>/releases/latest
-```
+Rust code lives in `rust/`.
 
-### Important distribution note
+- `voltdrop-p2p-core`: protocol, discovery, and session primitives
+- `voltdrop-rs`: runnable API server
 
-Do **not** commit the built `.exe` into the repository itself.
-Keep source code in the repo, and distribute binaries through **GitHub Releases**.
+Detailed status and migration plan:
 
-## Can anyone use the EXE?
+- `RUST_MIGRATION.md`
 
-Yes. Any Windows user can download the EXE and run their own local instance.
-
-What that means in practice:
-
-- the downloader becomes the **host** for their own LAN share
-- other devices on **their** Wi‑Fi can open the host’s LAN URL in a browser
-- it is still a local-network app, not a cloud multi-tenant service
-
-## SmartScreen / code signing
-
-An unsigned EXE may show a Windows SmartScreen warning when downloaded or launched.
-That does **not** mean the app is malicious, but it does mean Windows doesn’t yet trust the publisher identity.
-
-For smoother distribution, sign release builds with a code-signing certificate.
-
-## Notes
-
-- Stored files are encrypted on disk, but the encryption key is stored locally in the data directory. Protect the host machine itself.
-- Share links are short-lived but can be used by anyone on the LAN until they expire.
-- Browsers on other phones/laptops may still warn until that device installs the local CA from `/ca-cert.pem`.
-- A 1 TiB limit still requires enough free disk for the temporary upload file plus the encrypted destination file during upload. Use NTFS or another filesystem that supports files larger than 4 GB.
-- If your network uses a different subnet than the one detected automatically, set `FILESHARE_ALLOWED_SUBNETS` manually.
-- If share links should always point at a specific hostname or IP, set `FILESHARE_PUBLIC_BASE_URL`.
-- Live refresh works per running app instance. If you later scale this across multiple app replicas, use a shared pub/sub layer such as Redis.
-
-Example:
-
-```bash
-export FILESHARE_PUBLIC_BASE_URL="https://192.168.1.24:8765"
-```
-
-## Resetting the admin password
-
-Run the same command again:
-
-```bash
-python run.py create-admin --username admin
-```
-
-It updates the password hash for that username.
-
-## Internal author notes (hidden)
-
-This repo also ships with an internal author-only notes file to track design decisions and onboarding details that are not part of the public user documentation.
-
-- File: `./.author-notes.txt`
-- It is excluded from version control via `.gitignore`.
-- It is for original maintainer guidance only and should not be published in release docs.
-
-## License
-
-This project is licensed under the PolyForm Noncommercial License 1.0.0. See the [LICENSE](LICENSE) file for details.
